@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 
+export const prerender = true;
+
 type Field = string;
 type Entity = {
 	name: string;
@@ -741,8 +743,9 @@ const timingExamples = [
 				Send a link
 			</h2>
 			<p class="mt-4 text-stone-600 dark:text-stone-300">
-				Send a link to the repo (and the deployed URL, if any) to the
-				email you received this from. Include in the body:
+				Drop your repo URL below and I'll get a ping. Email is fine
+				too — the address you received this from. Either way, include
+				with your submission:
 			</p>
 			<ul class="mt-5 space-y-2 text-stone-700 dark:text-stone-300">
 				<li class="flex gap-2.5">
@@ -764,7 +767,114 @@ const timingExamples = [
 					<span>Anything you'd do differently with more time</span>
 				</li>
 			</ul>
-			<p class="mt-8 text-stone-600 dark:text-stone-400">Good luck.</p>
+
+			<form
+				id="submit-form"
+				class="mt-8 flex flex-col gap-3 sm:flex-row"
+				novalidate
+			>
+				<label for="repo-url" class="sr-only">GitHub repository URL</label>
+				<input
+					type="url"
+					id="repo-url"
+					name="url"
+					required
+					placeholder="https://github.com/yourname/your-repo"
+					autocomplete="off"
+					autocapitalize="off"
+					spellcheck="false"
+					class="flex-1 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 px-3.5 py-2.5 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+				/>
+				<button
+					type="submit"
+					id="submit-btn"
+					class="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:ring-offset-2 dark:focus:ring-offset-stone-950 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Submit
+				</button>
+			</form>
+			<p
+				id="submit-status"
+				class="mt-2 min-h-[1.25rem] text-sm text-stone-500 dark:text-stone-500"
+				aria-live="polite"
+			>
+			</p>
+
+			<p class="mt-10 text-stone-600 dark:text-stone-400">Good luck.</p>
+
+			<script>
+				const form = document.getElementById(
+					"submit-form",
+				) as HTMLFormElement | null;
+				const btn = document.getElementById(
+					"submit-btn",
+				) as HTMLButtonElement | null;
+				const status = document.getElementById(
+					"submit-status",
+				) as HTMLParagraphElement | null;
+
+				if (form && btn && status) {
+					const setStatus = (
+						msg: string,
+						tone: "info" | "ok" | "err" = "info",
+					) => {
+						status.textContent = msg;
+						const base = "mt-2 min-h-[1.25rem] text-sm ";
+						status.className =
+							base +
+							(tone === "ok"
+								? "text-emerald-600 dark:text-emerald-400"
+								: tone === "err"
+									? "text-red-600 dark:text-red-400"
+									: "text-stone-500 dark:text-stone-500");
+					};
+
+					form.addEventListener("submit", async (e) => {
+						e.preventDefault();
+						const data = new FormData(form);
+						const url = String(data.get("url") ?? "").trim();
+						if (!url) return setStatus("URL required", "err");
+						if (!/^https?:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/i.test(url)) {
+							return setStatus(
+								"Must be a github.com/owner/repo URL",
+								"err",
+							);
+						}
+						btn.disabled = true;
+						setStatus("Sending…");
+						try {
+							const res = await fetch("/api/submit", {
+								method: "POST",
+								headers: { "content-type": "application/json" },
+								body: JSON.stringify({ url }),
+							});
+							const json = (await res
+								.json()
+								.catch(() => ({}))) as { error?: string };
+							if (res.ok) {
+								setStatus(
+									"Submission received — thanks.",
+									"ok",
+								);
+								form.reset();
+							} else {
+								setStatus(
+									json.error ??
+										`Submission failed (${res.status})`,
+									"err",
+								);
+							}
+						} catch {
+							setStatus(
+								"Network error — try again or email instead.",
+								"err",
+							);
+						} finally {
+							btn.disabled = false;
+						}
+					});
+				}
+			</script>
 		</div>
 	</section>
 
