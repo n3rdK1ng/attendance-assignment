@@ -1,0 +1,758 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+type Field = string;
+type Entity = {
+	name: string;
+	tagline: string;
+	fields: Field[];
+	notes?: string[];
+};
+
+const entities: Entity[] = [
+	{
+		name: "User",
+		tagline: "The actor.",
+		fields: ["id", "email (unique)", "name", "passwordHash"],
+	},
+	{
+		name: "Assignment",
+		tagline: "The thing a time entry is logged against — a work category.",
+		fields: [
+			"id",
+			"name",
+			"code",
+			"type (WORK | VACATION | HOLIDAY)",
+		],
+		notes: ["Seeded globally; users do not create assignments."],
+	},
+	{
+		name: "Attendance",
+		tagline: "One record per user per month — the container for time entries.",
+		fields: ["id", "userId", "year", "month"],
+		notes: [
+			"Unique on (userId, year, month).",
+			"Created lazily the first time a user opens a month.",
+		],
+	},
+	{
+		name: "TimeEntry",
+		tagline: "A single line: \"on this day, I spent X minutes on this assignment\".",
+		fields: [
+			"id",
+			"attendanceId",
+			"assignmentId",
+			"date",
+			"workedMinutes",
+		],
+		notes: [
+			"Multiple entries per day are allowed (e.g. 6h WORK + 2h VACATION).",
+		],
+	},
+];
+
+const rules = [
+	"A user may only read or modify their own attendance and time entries.",
+	"A TimeEntry's date must fall within its Attendance.year / month.",
+	"A user cannot log time for future dates.",
+	"Total workedMinutes for any single date must not exceed 24 hours (1440 minutes).",
+];
+
+const reviewCriteria = [
+	{
+		title: "Does it work?",
+		body: "Can I docker compose up and exercise the full flow end-to-end on the first try?",
+	},
+	{
+		title: "Data model",
+		body: "Are constraints (uniqueness, FKs) enforced at the DB level where they should be?",
+	},
+	{
+		title: "Authorization",
+		body: "Can user A read or modify user B's data by guessing IDs? If yes, you fail this section.",
+	},
+	{
+		title: "Validation",
+		body: "What happens if I submit workedMinutes: -60? 99999? A date outside the month? An empty assignment?",
+	},
+	{
+		title: "Code organization",
+		body: "Can someone find their way around in 10 minutes? File structure, naming, separation of concerns.",
+	},
+	{
+		title: "README quality",
+		body: "Setup that works, documented trade-offs, an honest \"what I'd do next\" section.",
+	},
+];
+
+const recommendedStack = [
+	{ label: "TypeScript", group: "lang" },
+	{ label: "Hono", group: "back" },
+	{ label: "tRPC", group: "back" },
+	{ label: "Prisma", group: "back" },
+	{ label: "PostgreSQL", group: "back" },
+	{ label: "better-auth", group: "back" },
+	{ label: "TanStack Start", group: "front" },
+	{ label: "React", group: "front" },
+	{ label: "Tailwind v4", group: "front" },
+	{ label: "shadcn/ui", group: "front" },
+	{ label: "Biome", group: "tool" },
+	{ label: "pnpm", group: "tool" },
+	{ label: "Vitest", group: "tool" },
+];
+
+const stretchGoals = [
+	"Real-time updates across sessions / tabs (websocket / SSE / polling — say which)",
+	"2FA (TOTP)",
+	"Password reset flow",
+	"CSV export of a month's time entries",
+	"i18n with at least 2 languages",
+	"Bulk-fill: \"fill the rest of the month with 8h WORK on weekdays\"",
+	"Tests — unit and/or end-to-end",
+	"A CI pipeline (GitHub Actions / GitLab CI) that lints + tests + builds",
+];
+
+const timingExamples = [
+	{ label: "DB + schema", value: "2h" },
+	{ label: "API + auth", value: "4h" },
+	{ label: "Frontend", value: "6h" },
+	{ label: "Docker / packaging", value: "1h" },
+	{ label: "README", value: "30m" },
+];
+---
+
+<Layout>
+	<!-- Hero -->
+	<section class="relative overflow-hidden">
+		<div
+			class="absolute inset-0 bg-gradient-to-b from-indigo-50/60 to-transparent dark:from-indigo-950/20"
+			aria-hidden="true"
+		>
+		</div>
+		<div class="relative mx-auto max-w-3xl px-6 pt-20 pb-14 sm:pt-28">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				Take-home assignment
+			</p>
+			<h1
+				class="mt-4 text-4xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-5xl"
+			>
+				Mini Attendance App
+			</h1>
+			<p
+				class="mt-5 max-w-2xl text-lg leading-relaxed text-stone-600 dark:text-stone-300"
+			>
+				Build a small attendance application: a user logs how they spent
+				each working day of a month. The goal is to evaluate how you
+				design something small but real end-to-end — data model, API,
+				frontend, auth, and deployability.
+			</p>
+			<p class="mt-4 text-stone-600 dark:text-stone-400">
+				You don't need to match my codebase. Pick what you're
+				comfortable with. I care about a working, reasoned solution.
+			</p>
+			<div class="mt-7 flex flex-wrap gap-2">
+				<span
+					class="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1 text-xs font-medium text-white"
+				>
+					<span class="size-1.5 rounded-full bg-white"></span>
+					Deadline: end of the current month
+				</span>
+				<span
+					class="inline-flex items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white/80 dark:bg-stone-900/60 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-300 backdrop-blur"
+				>
+					Docker Compose required
+				</span>
+				<span
+					class="inline-flex items-center rounded-full border border-stone-300 dark:border-stone-700 bg-white/80 dark:bg-stone-900/60 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-300 backdrop-blur"
+				>
+					TypeScript preferred — not required
+				</span>
+			</div>
+		</div>
+	</section>
+
+	<!-- 01 Domain -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				01 — Domain
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				Three core entities
+			</h2>
+			<p class="mt-3 text-stone-600 dark:text-stone-400">
+				Stick to these names and relationships.
+			</p>
+
+			<div class="mt-8 grid gap-4 sm:grid-cols-2">
+				{
+					entities.map((entity) => (
+						<article class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5">
+							<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+								{entity.name}
+							</h3>
+							<p class="mt-1 text-sm text-stone-600 dark:text-stone-400">
+								{entity.tagline}
+							</p>
+							<div class="mt-4 flex flex-wrap gap-1.5">
+								{entity.fields.map((f) => (
+									<code class="rounded-md border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 px-2 py-0.5 text-xs font-mono text-stone-700 dark:text-stone-300">
+										{f}
+									</code>
+								))}
+							</div>
+							{entity.notes && (
+								<ul class="mt-4 space-y-1 text-sm text-stone-600 dark:text-stone-400">
+									{entity.notes.map((n) => (
+										<li class="flex gap-2">
+											<span class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600" />
+											<span>{n}</span>
+										</li>
+									))}
+								</ul>
+							)}
+						</article>
+					))
+				}
+			</div>
+
+			<div
+				class="mt-8 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+			>
+				<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+					Rules
+				</h3>
+				<ul class="mt-3 space-y-2.5">
+					{
+						rules.map((r) => (
+							<li class="flex gap-2.5 text-sm text-stone-700 dark:text-stone-300">
+								<svg
+									viewBox="0 0 20 20"
+									fill="currentColor"
+									class="mt-0.5 size-4 shrink-0 text-indigo-600 dark:text-indigo-400"
+								>
+									<path
+										fill-rule="evenodd"
+										d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.42 0l-3.5-3.5a1 1 0 011.42-1.42L8.5 12.085l6.79-6.795a1 1 0 011.414 0z"
+										clip-rule="evenodd"
+									/>
+								</svg>
+								<span>{r}</span>
+							</li>
+						))
+					}
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- 02 Functional requirements -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				02 — Functional requirements
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				What the app must do
+			</h2>
+
+			<div class="mt-8 space-y-5">
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+						Authentication
+					</h3>
+					<ul
+						class="mt-3 space-y-2 text-sm text-stone-700 dark:text-stone-300"
+					>
+						<li>
+							Email + password login. Sessions or JWTs are both
+							fine — pick one and explain.
+						</li>
+						<li>Logout.</li>
+						<li>
+							Routes must be gated: only authenticated users see
+							the app.
+						</li>
+					</ul>
+				</article>
+
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+						Core flow
+					</h3>
+					<ul
+						class="mt-3 space-y-2 text-sm text-stone-700 dark:text-stone-300"
+					>
+						<li>Land on the current month's attendance after login.</li>
+						<li>
+							A month view (calendar grid or table — your call)
+							showing each day with the time entries logged for it.
+						</li>
+						<li>
+							Add / edit / delete a time entry on a day: pick
+							assignment, enter duration (minutes or
+							<code class="rounded bg-stone-100 dark:bg-stone-800 px-1 py-0.5 font-mono text-xs"
+								>HH:MM</code
+							>).
+						</li>
+						<li>Switch between months (at minimum: previous month).</li>
+					</ul>
+				</article>
+
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+						Data validation
+					</h3>
+					<p class="mt-3 text-sm text-stone-700 dark:text-stone-300">
+						Both server- and client-side validation are expected.
+						<strong class="font-semibold">Server-side is non-negotiable</strong>;
+						client-side is for UX. State your validation rules
+						clearly in the README.
+					</p>
+				</article>
+			</div>
+		</div>
+	</section>
+
+	<!-- 03 Non-functional -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				03 — Non-functional
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				How it should run
+			</h2>
+
+			<div class="mt-8 space-y-5">
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+						Multiple seeded users
+					</h3>
+					<p class="mt-3 text-sm text-stone-700 dark:text-stone-300">
+						The app must come up empty-but-usable after a single
+						command. Provide a seed that creates at least:
+					</p>
+					<ul
+						class="mt-3 space-y-1.5 text-sm text-stone-700 dark:text-stone-300"
+					>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>3 users — credentials documented in the README</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>
+								5–10 assignments covering all three
+								<code class="rounded bg-stone-100 dark:bg-stone-800 px-1 py-0.5 font-mono text-xs"
+									>type</code
+								>s
+							</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>
+								For 1–2 of the users, a fully filled-in prior
+								month
+							</span>
+						</li>
+					</ul>
+					<p class="mt-3 text-xs text-stone-500 dark:text-stone-500">
+						Seed credentials may be hard-coded — call it out in the
+						README as a dev artifact.
+					</p>
+				</article>
+
+				<article
+					class="rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 p-5"
+				>
+					<div class="flex items-start gap-2">
+						<svg
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							class="mt-0.5 size-5 shrink-0 text-indigo-600 dark:text-indigo-400"
+						>
+							<rect x="3" y="3" width="7" height="7" rx="1.5"
+							></rect>
+							<rect x="14" y="3" width="7" height="7" rx="1.5"
+							></rect>
+							<rect x="3" y="14" width="7" height="7" rx="1.5"
+							></rect>
+							<rect x="14" y="14" width="7" height="7" rx="1.5"
+							></rect>
+						</svg>
+						<div>
+							<h3
+								class="font-semibold text-stone-900 dark:text-stone-50"
+							>
+								Hosting — Docker Compose required
+							</h3>
+							<p
+								class="mt-2 text-sm text-stone-700 dark:text-stone-300"
+							>
+								<code class="rounded bg-white dark:bg-stone-900 px-1.5 py-0.5 font-mono text-xs border border-indigo-200 dark:border-indigo-900/60"
+									>docker compose up</code
+								> from a fresh clone must produce a working app reachable
+								from a browser. That includes the database, server,
+								web app, and the seed step.
+							</p>
+							<p
+								class="mt-3 text-sm text-stone-700 dark:text-stone-300"
+							>
+								Document in the README:
+							</p>
+							<ul
+								class="mt-2 space-y-1 text-sm text-stone-700 dark:text-stone-300"
+							>
+								<li class="flex gap-2">
+									<span
+										class="mt-1.5 size-1 shrink-0 rounded-full bg-indigo-500/70"
+									></span>
+									<span>The exact command(s) to start the stack</span>
+								</li>
+								<li class="flex gap-2">
+									<span
+										class="mt-1.5 size-1 shrink-0 rounded-full bg-indigo-500/70"
+									></span>
+									<span>The URL(s) to open</span>
+								</li>
+								<li class="flex gap-2">
+									<span
+										class="mt-1.5 size-1 shrink-0 rounded-full bg-indigo-500/70"
+									></span>
+									<span>The seeded credentials</span>
+								</li>
+								<li class="flex gap-2">
+									<span
+										class="mt-1.5 size-1 shrink-0 rounded-full bg-indigo-500/70"
+									></span>
+									<span>How to reset the database</span>
+								</li>
+							</ul>
+							<p
+								class="mt-3 text-xs text-stone-500 dark:text-stone-500"
+							>
+								A cloud deployment on top of that is a nice
+								bonus, not required.
+							</p>
+						</div>
+					</div>
+				</article>
+
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+						Repository
+					</h3>
+					<ul
+						class="mt-3 space-y-2 text-sm text-stone-700 dark:text-stone-300"
+					>
+						<li>Public Git repo (GitHub / GitLab) or a zip.</li>
+						<li>
+							A
+							<code class="rounded bg-stone-100 dark:bg-stone-800 px-1 py-0.5 font-mono text-xs"
+								>README.md</code
+							> with: setup steps, seeded credentials, your tech-stack
+							choices and the
+							<em>why</em>, a list of what you skipped or would
+							add with more time.
+						</li>
+						<li>
+							No real secrets in committed
+							<code class="rounded bg-stone-100 dark:bg-stone-800 px-1 py-0.5 font-mono text-xs"
+								>.env</code
+							>. A
+							<code class="rounded bg-stone-100 dark:bg-stone-800 px-1 py-0.5 font-mono text-xs"
+								>.env.example</code
+							> is expected.
+						</li>
+					</ul>
+				</article>
+			</div>
+		</div>
+	</section>
+
+	<!-- 04 Tech stack -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				04 — Tech stack
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				Pick what you can ship in
+			</h2>
+
+			<div class="mt-8 grid gap-4 sm:grid-cols-2">
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<div class="flex items-center justify-between">
+						<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+							Recommended
+						</h3>
+						<span
+							class="rounded-full bg-indigo-100 dark:bg-indigo-950/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300"
+							>What I use</span
+						>
+					</div>
+					<div class="mt-4 flex flex-wrap gap-1.5">
+						{
+							recommendedStack.map((item) => (
+								<span class="rounded-md border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 px-2.5 py-1 text-xs font-medium text-stone-700 dark:text-stone-300">
+									{item.label}
+								</span>
+							))
+						}
+					</div>
+				</article>
+
+				<article
+					class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+				>
+					<div class="flex items-center justify-between">
+						<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+							Required
+						</h3>
+						<span
+							class="rounded-full bg-stone-100 dark:bg-stone-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-stone-700 dark:text-stone-300"
+							>Minimum</span
+						>
+					</div>
+					<ul
+						class="mt-4 space-y-2 text-sm text-stone-700 dark:text-stone-300"
+					>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>
+								A relational database — PostgreSQL preferred;
+								MySQL/SQLite acceptable
+							</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>
+								A web frontend — React, Vue, Svelte, HTMX, or
+								plain HTML
+							</span>
+						</li>
+						<li class="flex gap-2">
+							<span
+								class="mt-1.5 size-1 shrink-0 rounded-full bg-stone-400 dark:bg-stone-600"
+							></span>
+							<span>
+								A backend HTTP API — Node/TS, Go, Python, Rust,
+								etc.
+							</span>
+						</li>
+					</ul>
+				</article>
+			</div>
+
+			<p
+				class="mt-6 rounded-lg bg-stone-100/70 dark:bg-stone-900/60 px-4 py-3 text-sm text-stone-700 dark:text-stone-300"
+			>
+				A clean, working Go/Python/Ruby solution is more interesting
+				than a half-finished TS one. I'll evaluate the
+				<strong class="font-semibold">result</strong>, not whether you matched
+				my stack.
+			</p>
+		</div>
+	</section>
+
+	<!-- 05 Stretch goals -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				05 — Stretch goals
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				Optional — only if the core is solid
+			</h2>
+
+			<ul class="mt-8 grid gap-3 sm:grid-cols-2">
+				{
+					stretchGoals.map((goal) => (
+						<li class="flex gap-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-3.5 text-sm text-stone-700 dark:text-stone-300">
+							<span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-indigo-100 dark:bg-indigo-950/60 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+								+
+							</span>
+							<span>{goal}</span>
+						</li>
+					))
+				}
+			</ul>
+		</div>
+	</section>
+
+	<!-- 06 Review criteria -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				06 — Review
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				What I look at, in order
+			</h2>
+
+			<ol class="mt-8 space-y-3">
+				{
+					reviewCriteria.map((c, i) => (
+						<li class="flex gap-4 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5">
+							<span class="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-sm font-semibold text-white">
+								{String(i + 1).padStart(2, "0")}
+							</span>
+							<div>
+								<h3 class="font-semibold text-stone-900 dark:text-stone-50">
+									{c.title}
+								</h3>
+								<p class="mt-1 text-sm text-stone-600 dark:text-stone-400">
+									{c.body}
+								</p>
+							</div>
+						</li>
+					))
+				}
+			</ol>
+		</div>
+	</section>
+
+	<!-- 07 Deadline & timing -->
+	<section class="border-t border-stone-200 dark:border-stone-800">
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				07 — Deadline & timing
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				Deadline: end of the current month
+			</h2>
+			<p class="mt-4 text-stone-600 dark:text-stone-300">
+				In your submission, include rough timings for the major parts
+				of the work — for example:
+			</p>
+
+			<dl
+				class="mt-6 grid gap-2 sm:grid-cols-5 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900/60 p-5"
+			>
+				{
+					timingExamples.map((t) => (
+						<div class="flex flex-col gap-1">
+							<dt class="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-500">
+								{t.label}
+							</dt>
+							<dd class="font-mono text-sm font-semibold text-stone-900 dark:text-stone-100">
+								{t.value}
+							</dd>
+						</div>
+					))
+				}
+			</dl>
+
+			<p class="mt-5 text-sm text-stone-600 dark:text-stone-400">
+				I'm not grading by speed. I want the data to calibrate future
+				assignments and to understand where you spent your effort.
+			</p>
+		</div>
+	</section>
+
+	<!-- 08 Submission -->
+	<section
+		class="border-t border-stone-200 dark:border-stone-800 bg-stone-100/50 dark:bg-stone-900/40"
+	>
+		<div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+			<p
+				class="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400"
+			>
+				08 — Submission
+			</p>
+			<h2
+				class="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl"
+			>
+				Send a link
+			</h2>
+			<p class="mt-4 text-stone-600 dark:text-stone-300">
+				Send a link to the repo (and the deployed URL, if any) to the
+				email you received this from. Include in the body:
+			</p>
+			<ul class="mt-5 space-y-2 text-stone-700 dark:text-stone-300">
+				<li class="flex gap-2.5">
+					<span
+						class="mt-1.5 size-1.5 shrink-0 rounded-full bg-indigo-500"
+					></span>
+					<span>Per-section timings (see above)</span>
+				</li>
+				<li class="flex gap-2.5">
+					<span
+						class="mt-1.5 size-1.5 shrink-0 rounded-full bg-indigo-500"
+					></span>
+					<span>Anything you'd want me to specifically look at</span>
+				</li>
+				<li class="flex gap-2.5">
+					<span
+						class="mt-1.5 size-1.5 shrink-0 rounded-full bg-indigo-500"
+					></span>
+					<span>Anything you'd do differently with more time</span>
+				</li>
+			</ul>
+			<p class="mt-8 text-stone-600 dark:text-stone-400">Good luck.</p>
+		</div>
+	</section>
+
+	<footer class="border-t border-stone-200 dark:border-stone-800">
+		<div
+			class="mx-auto max-w-3xl px-6 py-8 text-xs text-stone-500 dark:text-stone-500"
+		>
+			<p>Take-home assignment</p>
+		</div>
+	</footer>
+</Layout>
