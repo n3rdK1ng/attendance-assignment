@@ -37,7 +37,6 @@ export const POST: APIRoute = async ({ request }) => {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({
-			username: "Sergeant Stampy",
 			content: `📋 **New recruit reporting in.**\n${url}`,
 			allowed_mentions: { parse: [] },
 		}),
