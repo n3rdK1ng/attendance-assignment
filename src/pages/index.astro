@@ -76,6 +76,14 @@ const reviewCriteria = [
 		body: "What happens if I submit workedMinutes: -60? 99999? A date outside the month? An empty assignment?",
 	},
 	{
+		title: "Error handling",
+		body: "DB down, malformed payloads, dependency timeouts — are errors caught at the right layer, surfaced clearly to the client, and not silently swallowed? Crashing is fine; lying isn't.",
+	},
+	{
+		title: "Type safety",
+		body: "If your language has a type system, is it doing work? No `any` / `interface{}` escape hatches at API boundaries, narrow types at the surface, invariants encoded in types where they fit.",
+	},
+	{
 		title: "Code organization",
 		body: "Can someone find their way around in 10 minutes? File structure, naming, separation of concerns.",
 	},
